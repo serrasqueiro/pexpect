@@ -51,7 +51,6 @@ except NameError:
 # Some constants.
 #
 COMMAND_PROMPT = '[#$] ' ### This is way too simple for industrial use -- we will change is ASAP.
-COMMAND_PROMPT = 'guest@kino:~> '
 TERMINAL_PROMPT = r'(?i)terminal type\?'
 TERMINAL_TYPE = 'vt100'
 # This is the prompt we get if SSH does not have the remote host's public key stored in the cache.
@@ -64,16 +63,20 @@ def exit_with_usage():
 
 
 def main():
-    global COMMAND_PROMPT, TERMINAL_PROMPT, TERMINAL_TYPE, SSH_NEWKEY
-    ######################################################################
-    ## Parse the options, arguments, get ready, etc.
-    ######################################################################
     try:
         optlist, args = getopt.getopt(sys.argv[1:], 'h?s:u:p:', ['help','h','?'])
     except Exception as e:
         print(str(e))
         exit_with_usage()
     options = dict(optlist)
+    my_prompt = f"[a-z][a-z]*@[a-z]*:~> "
+    options["term_prompt"] = my_prompt
+    run_main(args, options)
+
+
+def run_main(args, options):
+    global COMMAND_PROMPT, TERMINAL_PROMPT, TERMINAL_TYPE, SSH_NEWKEY
+    term_prompt = options["term_prompt"]
     if len(args) > 1:
         exit_with_usage()
 
@@ -97,7 +100,7 @@ def main():
     #
     # Login via SSH
     #
-    acmd = 'ssh -l %s %s'%(user, host)
+    acmd = f"ssh -l {user} {host}"
     print("Logging in:", acmd)
     child = pexpect.spawn(acmd)
     i = child.expect([pexpect.TIMEOUT, SSH_NEWKEY, COMMAND_PROMPT, '(?i)password'])
@@ -108,7 +111,7 @@ def main():
         sys.exit (1)
     if i == 1: # In this case SSH does not have the public key cached.
         child.sendline ('yes')
-        child.expect ('(?i)password')
+        child.expect('(?i)password')
     if i == 2:
         # This may happen if a public key was setup to automatically login.
         # But beware, the COMMAND_PROMPT at this point is very trivial and
@@ -118,10 +121,10 @@ def main():
         child.sendline(password)
         # Now we are either at the command prompt or
         # the login process is asking for our terminal type.
-        i = child.expect ([COMMAND_PROMPT, TERMINAL_PROMPT])
+        i = child.expect([term_prompt, TERMINAL_PROMPT])
         if i == 1:
             child.sendline (TERMINAL_TYPE)
-            child.expect (COMMAND_PROMPT)
+            child.expect(term_prompt)
     #
     # Set command prompt to something more unique.
     #
@@ -131,7 +134,7 @@ def main():
     if i == 0:
         print("# Couldn't set sh-style prompt -- trying csh-style.")
         child.sendline(r"set prompt='[PEXPECT]\$ '")
-        i = child.expect ([pexpect.TIMEOUT, COMMAND_PROMPT], timeout=10)
+        i = child.expect([pexpect.TIMEOUT, COMMAND_PROMPT], timeout=10)
         if i == 0:
             print("Failed to set command prompt using sh or csh style.")
             print("Response was:")
@@ -171,27 +174,27 @@ def main():
     print()
     print('Uptime: %s days, %s users, %s (1 min), %s (5 min), %s (15 min)' % (
         duration, users, av1, av5, av15))
-    child.expect (COMMAND_PROMPT)
+    child.expect(COMMAND_PROMPT)
 
     # Run vmstat.
     child.sendline ('vmstat')
-    child.expect (COMMAND_PROMPT)
+    child.expect(COMMAND_PROMPT)
     print(sbefore(child))
 
     # Run free.
     if LINUX_MODE:
         child.sendline ('free') # Linux systems only.
-        child.expect (COMMAND_PROMPT)
+        child.expect(COMMAND_PROMPT)
         print(sbefore(child))
 
     # Run df.
     child.sendline ('df')
-    child.expect (COMMAND_PROMPT)
+    child.expect(COMMAND_PROMPT)
     print(sbefore(child))
 
     # Run lsof.
     child.sendline ('lsof')
-    child.expect (COMMAND_PROMPT)
+    child.expect(COMMAND_PROMPT)
     print(sbefore(child))
 
     # Now exit the remote host.
