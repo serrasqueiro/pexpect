@@ -37,6 +37,8 @@ You can install Pexpect using pip::
 
 `Docs on ReadTheDocs <https://pexpect.readthedocs.io/>`_
 
+See also [examples here](https://pexpect.readthedocs.io/en/stable/examples.html)
+
 PEXPECT LICENSE::
 
     http://opensource.org/licenses/isc-license.txt
