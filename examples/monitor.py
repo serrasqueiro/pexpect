@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
-''' This runs a sequence of commands on a remote host using SSH. It runs a
-simple system checks such as uptime and free to monitor the state of the remote
-host.
+from __future__ import print_function
+from __future__ import absolute_import
+import os, sys, re, getopt, getpass
+import pexpect
 
+_USAGE = """
 ./monitor.py [-s server_hostname] [-u username] [-p password]
     -s : hostname of the remote server to login to.
     -u : username to user for login.
@@ -16,7 +18,6 @@ Example:
 It works like this:
     Login via SSH (This is the hardest part).
     Run and parse 'uptime'.
-    Run 'iostat'.
     Run 'vmstat'.
     Run 'netstat'
     Run 'free'.
@@ -38,16 +39,7 @@ PEXPECT LICENSE
     WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
     ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
     OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-'''
-
-from __future__ import print_function
-
-from __future__ import absolute_import
-
-import os, sys, re, getopt, getpass
-import pexpect
-
+"""
 
 try:
     raw_input
@@ -59,18 +51,19 @@ except NameError:
 # Some constants.
 #
 COMMAND_PROMPT = '[#$] ' ### This is way too simple for industrial use -- we will change is ASAP.
+COMMAND_PROMPT = 'guest@kino:~> '
 TERMINAL_PROMPT = r'(?i)terminal type\?'
 TERMINAL_TYPE = 'vt100'
 # This is the prompt we get if SSH does not have the remote host's public key stored in the cache.
 SSH_NEWKEY = '(?i)are you sure you want to continue connecting'
 
 def exit_with_usage():
+    #print(globals()['__doc__'])
+    print(_USAGE)
+    os._exit(0)
 
-    print(globals()['__doc__'])
-    os._exit(1)
 
 def main():
-
     global COMMAND_PROMPT, TERMINAL_PROMPT, TERMINAL_TYPE, SSH_NEWKEY
     ######################################################################
     ## Parse the options, arguments, get ready, etc.
@@ -104,11 +97,13 @@ def main():
     #
     # Login via SSH
     #
-    child = pexpect.spawn('ssh -l %s %s'%(user, host))
+    acmd = 'ssh -l %s %s'%(user, host)
+    print("Logging in:", acmd)
+    child = pexpect.spawn(acmd)
     i = child.expect([pexpect.TIMEOUT, SSH_NEWKEY, COMMAND_PROMPT, '(?i)password'])
     if i == 0: # Timeout
         print('ERROR! could not login with SSH. Here is what SSH said:')
-        print(child.before, child.after)
+        print(sbefore(child), child.after)
         print(str(child))
         sys.exit (1)
     if i == 1: # In this case SSH does not have the public key cached.
@@ -131,17 +126,17 @@ def main():
     # Set command prompt to something more unique.
     #
     COMMAND_PROMPT = r"\[PEXPECT\]\$ "
-    child.sendline (r"PS1='[PEXPECT]\$ '") # In case of sh-style
-    i = child.expect ([pexpect.TIMEOUT, COMMAND_PROMPT], timeout=10)
+    child.sendline(r"PS1='[PEXPECT]\$ '") # In case of sh-style
+    i = child.expect([pexpect.TIMEOUT, COMMAND_PROMPT], timeout=10)
     if i == 0:
         print("# Couldn't set sh-style prompt -- trying csh-style.")
-        child.sendline (r"set prompt='[PEXPECT]\$ '")
+        child.sendline(r"set prompt='[PEXPECT]\$ '")
         i = child.expect ([pexpect.TIMEOUT, COMMAND_PROMPT], timeout=10)
         if i == 0:
             print("Failed to set command prompt using sh or csh style.")
             print("Response was:")
-            print(child.before)
-            sys.exit (1)
+            print(sbefore(child))
+            sys.exit(1)
 
     # Now we should be at the command prompt and ready to run some commands.
     print('---------------------------------------')
@@ -149,21 +144,20 @@ def main():
     print('---------------------------------------')
 
     # Run uname.
-    child.sendline ('uname -a')
-    child.expect (COMMAND_PROMPT)
-    print(child.before)
-    if 'linux' in child.before.lower():
-        LINUX_MODE = 1
-    else:
-        LINUX_MODE = 0
+    child.sendline('uname -a')
+    child.expect(COMMAND_PROMPT)
+    print(":::", sbefore(child))
+    LINUX_MODE = int('linux' in sbefore(child).lower())
 
     # Run and parse 'uptime'.
-    child.sendline ('uptime')
+    child.sendline('uptime')
     child.expect(r'up\s+(.*?),\s+([0-9]+) users?,\s+load averages?: ([0-9]+\.[0-9][0-9]),?\s+([0-9]+\.[0-9][0-9]),?\s+([0-9]+\.[0-9][0-9])')
-    duration, users, av1, av5, av15 = child.match.groups()
+    bduration, users, av1, av5, av15 = child.match.groups()
+    duration = sbefore(bduration)
     days = '0'
     hours = '0'
     mins = '0'
+    print(f"Uptime, duration='{duration}': {days}d, {hours}h, {mins}mins")
     if 'day' in duration:
         child.match = re.search(r'([0-9]+)\s+day',duration)
         days = str(int(child.match.group(1)))
@@ -179,51 +173,45 @@ def main():
         duration, users, av1, av5, av15))
     child.expect (COMMAND_PROMPT)
 
-    # Run iostat.
-    child.sendline ('iostat')
-    child.expect (COMMAND_PROMPT)
-    print(child.before)
-
     # Run vmstat.
     child.sendline ('vmstat')
     child.expect (COMMAND_PROMPT)
-    print(child.before)
+    print(sbefore(child))
 
     # Run free.
     if LINUX_MODE:
         child.sendline ('free') # Linux systems only.
         child.expect (COMMAND_PROMPT)
-        print(child.before)
+        print(sbefore(child))
 
     # Run df.
     child.sendline ('df')
     child.expect (COMMAND_PROMPT)
-    print(child.before)
+    print(sbefore(child))
 
     # Run lsof.
     child.sendline ('lsof')
     child.expect (COMMAND_PROMPT)
-    print(child.before)
-
-#    # Run netstat
-#    child.sendline ('netstat')
-#    child.expect (COMMAND_PROMPT)
-#    print child.before
-
-#    # Run MySQL show status.
-#    child.sendline ('mysql -p -e "SHOW STATUS;"')
-#    child.expect (PASSWORD_PROMPT_MYSQL)
-#    child.sendline (password_mysql)
-#    child.expect (COMMAND_PROMPT)
-#    print
-#    print child.before
+    print(sbefore(child))
 
     # Now exit the remote host.
     child.sendline ('exit')
     index = child.expect([pexpect.EOF, "(?i)there are stopped jobs"])
-    if index==1:
+    if index == 1:
         child.sendline("exit")
         child.expect(EOF)
+
+def sbefore(child) -> str:
+    try:
+        ubytes = child.before
+    except AttributeError:
+        ubytes = None
+    if ubytes is None:
+        ubytes = child
+    if isinstance(ubytes, bytes):
+        return ubytes.decode("ascii")
+    return ubytes
+
 
 if __name__ == "__main__":
     main()
