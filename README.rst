@@ -5,6 +5,9 @@
 
 Pexpect is a Pure Python Expect-like module
 
+This [repo](https://github.com/serrasqueiro/pexpect) is a fork of:
+- `git@github.com:pexpect/pexpect.git`
+
 Pexpect makes Python a better tool for controlling other applications.
 
 Pexpect is a pure Python module for spawning child applications; controlling
